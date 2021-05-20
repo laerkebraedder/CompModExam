@@ -1,0 +1,181 @@
+---
+title: "Untitled"
+author: "Lærke Brædder"
+date: "5/16/2021"
+output: html_document
+---
+
+```{r 1. Loading all data}
+pacman::p_load(tidyverse, ggplot2, dplyr)
+
+# Loading the data:
+df <-read.table("/Users/laerkebraedder/Desktop/Uni/Social and Cultural Dynamics/Exam project/NetLogo/final_table.csv",
+                header = T,   # set columns names true
+                sep = ",",    # define the separator between columns
+                skip = 6,     # skip first 6 rows 
+                fill = TRUE ) # add blank fields if rows have unequal lengths
+
+# Giving the columns some nicer names:
+df <- rename(df, male_percentage = mean.ingroup.male.percentage )
+df <- rename(df, fightprob_gs      = mean.list.pr.fight.gs )
+df <- rename(df, fightprob_mfratio = mean.list.pr.fight.mf.ratio )
+df <- rename(df, fightprob_total   = mean.list.pr.fight.total )
+df <- rename(df, POF   = fight.ratio )
+```
+
+```{r 1.1. 100 reps - Initial plots}
+# Turning male-per
+df$male_percentage <- as.factor(df$male_percentage)
+
+# Creating a subset where we change gs_sd to factor:
+sub1 <- df
+sub1$gs_sd <- as.factor(sub1$gs_sd)
+
+#plot
+ggplot(sub1, aes(x = male_percentage, y = POF, color = gs_sd)) + 
+  geom_smooth() + 
+  facet_wrap(~ gs_mean, labeller = label_both) +
+  labs(title = "The Effect of Group Size Heterogeneity on the POF_outcome",
+       subtitle = "At Different Levels of Mean Ingroup Male Percentage",
+       x = "Mean Male Percentage",
+       y = "POF_outcome", 
+       color = "Group Size SD")
+
+# Creating a subset where we change male_percentage to factor:
+sub2 <- df
+sub2$male_percentage <- as.factor(sub2$male_percentage)
+
+#plot
+ggplot(sub2, aes(x = gs_sd, y = POF, color = male_percentage)) + 
+  geom_smooth() + 
+  facet_wrap(~ gs_mean, labeller = label_both) +
+  labs(title = "The Effect of Group Size Heterogeneity on the POF_outcome",
+       subtitle = "At Different Levels of Mean Ingroup Male Percentage",
+       x = "Group Size SD",
+       y = "POF_outcome", 
+       color = "Mean Male Percentage")
+```
+
+```{r 1.2. 100 reps - elongating data to make facet_wrapped plot}
+#Separating the df by the individual parameter probability types:
+gs <- select(df, 
+             X.run.number., 
+             gs_mean, 
+             gs_sd, 
+             male_percentage, 
+             fightprob_gs
+             )
+mf <- select(df, 
+             X.run.number., 
+             gs_mean, 
+             gs_sd, 
+             male_percentage, 
+             fightprob_mfratio
+             )
+oc <- select(df,                  # oc stands for outcome
+             X.run.number., 
+             gs_mean, 
+             gs_sd, 
+             male_percentage, 
+             POF
+             )
+# Adding columns containing the probability type:
+gs$prob_type <- "POF_GroupSize"
+gs$prob <- gs$fightprob_gs
+gs$fightprob_gs <- NULL
+
+mf$prob_type <- "POF_MFratio"
+mf$prob <- mf$fightprob_mfratio
+mf$fightprob_mfratio <- NULL
+
+oc$prob_type <- "Outcome FightRatio"
+oc$prob <- oc$POF
+oc$POF <- NULL
+
+# Binding the subsets into a longer df:
+dflong <- rbind(gs, mf, oc)
+```
+
+```{r 1.3. 100 reps - making facet plot}
+# New facet label names for POF Type variable
+MP.labs <- c("MP:0", "MP:20", "MP:40", "MP:60", "MP:80", "MP:100")
+names(MP.labs) <- c("0", "20", "40", "60", "80", "100")
+
+# New facet label names for gs mean variable
+GS.labs <- c("GSmean:5", "GSmean:10", "GSmean:15", "GSmean:20")
+names(GS.labs) <- c("5", "10", "15", "20")
+
+#plot:
+ggplot(dflong, aes(x = gs_sd, y = prob, color = prob_type)) + 
+  geom_smooth() + 
+  labs(title = "The Effect of Group Size Heterogeneity on POF", 
+       subtitle = "At Different Levels of Mean Ingroup Male Percentage and Mean Group Size",
+       x = "Group Size SD",
+       y = "POF",
+       color = "POF Type") +
+  facet_grid(male_percentage ~ gs_mean, 
+             labeller = labeller(male_percentage = MP.labs, 
+                                 gs_mean = GS.labs))
+```
+
+
+```{r 1.4. descriptive stats}
+# We can see from the plots that in all combinations of mean group size and in-group male percentage, most drastic change seem to be happening between SD=5 and SD=10 (also between SD=0 and SD=5, but the mean outcome POF is always zero when SD=0, so we do not need to see that in a table).
+
+tablesub <- subset(df, gs_sd == 5 | gs_sd == 10)
+
+
+
+mean <- data.frame(aggregate(tablesub$POF, list(tablesub$gs_mean, tablesub$male_percentage, tablesub$gs_sd), mean))
+
+mean <- dplyr::rename(mean, 
+              mean_POF = x,
+              gs_mean = Group.1,
+              gs_sd = Group.3,
+              male_percentage = Group.2
+              )
+
+sd <- data.frame(aggregate(tablesub$standard.deviation.list.pr.fight.total, list(tablesub$gs_mean, tablesub$male_percentage, tablesub$gs_sd), mean))
+
+sd <- dplyr::rename(sd, 
+              sd_POF = x,
+              gs_mean = Group.1,
+              gs_sd = Group.3,
+              male_percentage = Group.2
+              )
+stats <- merge(mean, sd, by = c("gs_mean", "gs_sd", "male_percentage"))
+
+
+ggplot (stats, aes(mean_POF, male_percentage, color = gs_mean)) + 
+  geom_point() + 
+  theme_classic() + 
+  labs(title = "",
+       subtitle = "",
+       x = "Aggregated POF_outcome",
+       y = "Mean Male Percentage",
+       color = "Mean Group Size")
+
+stats_small <- subset(stats, male_percentage == 20 | male_percentage == 60 | male_percentage == 100)
+write_csv(stats_small, "stats.csv")
+```
+
+
+
+```{r Illustrative plot}
+w <- c(0, 0.1, 0.4, 0.8, 1)
+q <- c(0, 10, 40, 80, 100)
+W <- data.frame(w, q)
+
+ggplot(W, aes(x=q, y=w)) + 
+  geom_line(color = "red") + 
+  xlab("Male Percentage") + 
+  ylab("POF_MFratio") + 
+  ggtitle("Assumed Relationship Between POF_MFratio and Male Percentage") + 
+  theme_classic()
+```
+
+
+
+
+
+
